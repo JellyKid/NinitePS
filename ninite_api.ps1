@@ -1,12 +1,31 @@
-function parse-status($status) {
+
+$job = 'audit'
+
+function create_hash ([array] $doublearray) {
+	$keys = $doublearray[0].split(",")
+	$values = $doublearray[1].split(",")
+    $h = @{}
+    if ($keys.Length -ne $values.Length) {
+        Write-Error -Message "Array lengths do not match" `
+                    -Category InvalidData `
+                    -TargetObject $values
+    } else {
+        for ($i = 0; $i -lt $keys.Length; $i++) {
+            $h[$keys[$i]] = $values[$i]
+        }
+    }
+    return $h
+}
+
+function parse-results($resulthash) {
 	$needed = @()
-	foreach($item in $status) {
-		$item
-		if ($item.Contains('Update') {
-			$needed += $item
+	foreach($item in $resulthash.GetEnumerator()) {
+		if ($item.Value.Contains('Update')) {
+			$needed += $item.Name
 		}		
 	}
-	return $needed
+	$returnstring = $needed -Join ','
+	return $returnstring 
 }
 
 function Call-Ninite {
@@ -21,9 +40,9 @@ function Call-Ninite {
 
 	$exists = Test-Path Ninite.exe
 	if($exists) {
+		Write-Host $job"ing" $computer
 		$status = .\Ninite.exe /remote $computer /$job /silent . | Write-Output
 		$status = $status[1..($status.Count - 1)]
-		<# $status = ConvertFrom-Csv -InputObject $status #>
 		return $status
 	} else {
 		echo "Error Ninite doesn't exist in this path"
@@ -34,7 +53,7 @@ function Call-Ninite {
 
 $exists = Test-Path ComputerList.csv
 if ($exists) {
-	$CompList = Import-Csv ComputerList.csv
+	$CompList = @(Import-Csv ComputerList.csv)
 } else {
 	$CompList = @()
 }
@@ -42,50 +61,65 @@ if ($exists) {
 $CompObj = @{
 	'Name'			= $null;
 	'Pingable'		= $null;
-	'UpDated'		= $null;
+	'UpToDate'		= $null;
 	'Needed'		= $null;
 	'LastContact'	= $null;
 }
-$computer = New-Object -TypeName PSObject -Property $CompObj
+
 
 
 
 #Get all machines in AD and test their connectivity
 
 Import-Module ActiveDirectory
-#$ADList = Get-ADComputer -Filter '*' 
-$ADList = Get-ADComputer -Filter {(cn -eq "JS-MSI")}
+$ADList = Get-ADComputer -Filter '*' 
+#$ADList = Get-ADComputer -Filter {(cn -eq "JS-MSI")}
 
 
 foreach ($computer in $ADList) {
 	if ($computer.Enabled){					#PING MACHINES TO TEST CONNECTIVITY
-		$computer.Pingable = Test-Connection -ComputerName $computer.Name -Count 1 -Quiet
+		$NewCompObj = New-Object -TypeName PSObject -Property $CompObj
+		$NewCompObj.Name = $computer.Name
+		$NewCompObj.Pingable = Test-Connection -ComputerName $NewCompObj.Name -Count 1 -Quiet
 		
 		
-		if ($computer.Pingable) {			#AUDIT MACHINE WITH NINITE
-			$results = Call-Ninite 'audit' $computer.Name
+		if ($NewCompObj.Pingable) {			#AUDIT MACHINE WITH NINITE
+			
+			$results = Call-Ninite $job $NewCompObj.Name
+		
+		
+			if ($results) {						#PARSE RESULTS
+				$reshash = create_hash($results)
+				$NewCompObj.UpToDate = $reshash.Status
+				if ($NewCompObj.UpToDate -ne 'OK'){
+					$NewCompObj.Needed  = parse-results($reshash)
+				}
+				$NewCompObj.LastContact = Get-Date
+			}
+					
+			
 		}
 		
-		if ($results) {						#PARSE RESULTS
-			$computer.UpDated = $results.Status
-			$computer.Needed  = parse-status($results)
-			$computer.LastContact = Get-Date
-		}
-		
-		<# if ($testcon) {
-			$computer.Pingable = $true
-		} else {
-			$computer.Pingable = $false
-		} #>
-		
-		if ($CompList.Name.Contains($computer.Name)) {
-			$CompList[$CompList.Name.IndexOf($computer.Name)].Pingable = $computer.Pingable
-		} else {
-			$CompList += $computer
-		}
-		
+		if ($CompList){
+				if ($CompList.Name.Contains($NewCompObj.Name)) {
+					$index = $CompList.Name.IndexOf($NewCompObj.Name)
+					if ($NewCompObj.Pingable) {
+						$CompList[$index].Pingable = $NewCompObj.Pingable
+						$CompList[$index].UpToDate = $NewCompObj.UpToDate
+						$CompList[$index].Needed = $NewCompObj.Needed
+						$CompList[$index].LastContact = $NewCompObj.LastContact	
+					} else {
+						$CompList[$index].Pingable = $NewCompObj.Pingable
+					}
+				} else {
+					$CompList += $NewCompObj
+				}
+			} else {
+					$CompList += $NewCompObj
+			}
 		
 	}
 }
-
-$CompList | Sort-Object Name | Export-CSV ComputerList.csv -NoTypeInformation
+ if ($CompList) {
+	$CompList | Sort-Object Name | Export-CSV ComputerList.csv -NoTypeInformation
+}
