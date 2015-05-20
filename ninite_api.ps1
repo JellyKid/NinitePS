@@ -1,5 +1,55 @@
+param(
+		
+		[Parameter(ParameterSetName='install')]
+		[Switch]$install,
+		[Parameter(ParameterSetName='uninstall')]
+		[Switch]$uninstall,
+		[Parameter(ParameterSetName='audit')]
+		[Switch]$audit,
+		[Parameter(ParameterSetName='update')]
+		[Switch]$update,
+		[Parameter(ValueFromRemainingArguments=$true,Position=0)]
+		[string[]]$product
+)
+	
 
-$job = 'audit'
+if($install){
+	$job = @(
+		"/disableshortcuts",
+		"/disableautoupdate"
+	)
+}	
+
+if($uninstall){
+	$job = @(
+		"/uninstall"		
+	)
+}
+
+if($update){
+	$job = @(
+		"/updateonly",
+		"/disableshortcuts",
+		"/disableautoupdate"
+	)
+}
+
+if($audit){
+	$job = @(
+		"/audit"
+	)
+}
+
+$job += @("/silent",".")
+
+if($product){
+    $job += @("/select")
+    $job += $product
+}
+
+
+
+	
 
 function create_hash ([array] $doublearray) {
 	$keys = $doublearray[0].split(",")
@@ -40,8 +90,8 @@ function Call-Ninite {
 
 	$exists = Test-Path Ninite.exe
 	if($exists) {
-		Write-Host $job"ing" $computer
-		$status = .\Ninite.exe /remote $computer /$job /silent . | Write-Output
+		Write-Host $job $computer
+		$status = & .\Ninite.exe $job | Write-Output
 		$status = $status[1..($status.Count - 1)]
 		return $status
 	} else {
@@ -72,8 +122,8 @@ $CompObj = @{
 #Get all machines in AD and test their connectivity
 
 Import-Module ActiveDirectory
-$ADList = Get-ADComputer -Filter '*' 
-#$ADList = Get-ADComputer -Filter {(cn -eq "JS-MSI")}
+#$ADList = Get-ADComputer -Filter '*' 
+$ADList = Get-ADComputer -Filter {(cn -eq "JS-MSI")}
 
 
 foreach ($computer in $ADList) {
