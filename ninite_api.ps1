@@ -9,9 +9,11 @@ param(
 		[Parameter(ParameterSetName='update')]
 		[Switch]$update,
 		[Parameter(ValueFromRemainingArguments=$true,Position=0)]
-		[string[]]$product
+		[string[]]$product,
+        [Switch]$FullReports
 )
-	
+
+
 
 if($install){
 	$job = @(
@@ -34,11 +36,6 @@ if($update){
 	)
 }
 
-if($audit){
-	$job = @(
-		"/audit"
-	)
-}
 
 $job += @("/silent",".")
 
@@ -88,21 +85,62 @@ function Call-Ninite {
 		$computer
 	)
 
-	$exists = Test-Path Ninite.exe
-	if($exists) {
+	
+	if(Test-Path Ninite.exe) {
 		Write-Host $job $computer
+        $job += @("/remote",$computer)
 		$status = & .\Ninite.exe $job | Write-Output
-		$status = $status[1..($status.Count - 1)]
+        
+		$status = $status[1..($status.Count - 1)]  
 		return $status
 	} else {
-		echo "Error Ninite doesn't exist in this path"
+		Write-Error "Error Ninite.exe doesn't exist in this path"
 		return $null
 	}
 }
 
+function BuildReport ($MyReport) {
 
-$exists = Test-Path ComputerList.csv
-if ($exists) {
+#Get Computer Not Updated Count
+$cnu = 0
+$MyReport.Needed.ForEach({
+    if($_ -ne '' -and $_ -ne $null){
+    $cnu++
+    }
+})
+
+$Header = @"
+<style>
+TABLE {border-width: 1px;border-style: solid;border-color: black;border-collapse: collapse;}
+TH {border-width: 1px;padding: 3px;border-style: solid;border-color: black;background-color: #6495ED;}
+TD {border-width: 1px;padding: 3px;border-style: solid;border-color: black;}
+tr:nth-child(odd) {background: #CCC}
+</style>
+"@
+
+$date = Get-Date
+
+$pre = @"
+<h1>
+3rd Party Update Report 
+</h1>
+<h2>
+Run on $date
+</h2>
+"@
+
+$Post = @"
+<h2>
+$cnu computers need updates
+</h2>
+"@
+
+$MyReport | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed' | ConvertTo-HTML -Head $Header -PreContent $Pre -PostContent $Post | Out-File UpdateReport.html
+}
+
+
+
+if (Test-Path ComputerList.csv) {
 	$CompList = @(Import-Csv ComputerList.csv)
 } else {
 	$CompList = @()
@@ -127,28 +165,51 @@ $ADList = Get-ADComputer -Filter {(cn -eq "JS-MSI")}
 
 
 foreach ($computer in $ADList) {
-	if ($computer.Enabled){					#PING MACHINES TO TEST CONNECTIVITY
+	if ($computer.Enabled){					
 		$NewCompObj = New-Object -TypeName PSObject -Property $CompObj
 		$NewCompObj.Name = $computer.Name
 		$NewCompObj.Pingable = Test-Connection -ComputerName $NewCompObj.Name -Count 1 -Quiet
 		
 		
-		if ($NewCompObj.Pingable) {			#AUDIT MACHINE WITH NINITE
+		if ($NewCompObj.Pingable) {			
 			
+            
+            if (!$audit) {
+                Call-Ninite $job $NewCompObj.Name
+            }
+
+            #Ninite needs to be called /w the audit command no matter what to get the results
+
+            $job = @("/audit","/silent",".")
+            
+            
 			$results = Call-Ninite $job $NewCompObj.Name
 		
 		
 			if ($results) {						#PARSE RESULTS
+                
 				$reshash = create_hash($results)
+
+                if($FullReports){
+                    $date = Get-Date -UFormat "%m%d%Y-%H%M"
+                    $compname = $NewCompObj.Name
+                    if(!(Test-Path ".\FullReports")){New-Item -ItemType directory 'FullReports'}
+                    $reshash | Export-Csv -Path ".\FullReports\$compname-$date.csv"
+                }
+                
 				$NewCompObj.UpToDate = $reshash.Status
 				if ($NewCompObj.UpToDate -ne 'OK'){
 					$NewCompObj.Needed  = parse-results($reshash)
+                    $cnu ++
 				}
 				$NewCompObj.LastContact = Get-Date
-			}
+			} else {Write-Host 'No results?'}
 					
 			
 		}
+        else {
+            $NewCompObj.UpToDate = 'UnKnown'
+        }
 		
 		if ($CompList){
 				if ($CompList.Name.Contains($NewCompObj.Name)) {
@@ -172,4 +233,5 @@ foreach ($computer in $ADList) {
 }
  if ($CompList) {
 	$CompList | Sort-Object Name | Export-CSV ComputerList.csv -NoTypeInformation
+    BuildReport($CompList)
 }
