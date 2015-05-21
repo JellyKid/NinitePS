@@ -194,8 +194,8 @@ foreach ($computer in $ADList) {
                     $date = Get-Date -UFormat "%m%d%Y-%H%M"
                     $compname = $NewCompObj.Name
                     if(!(Test-Path ".\FullReports")){New-Item -ItemType directory 'FullReports'}
-
-                    #$reshash | Export-Csv -Path ".\FullReports\$compname-$date.csv"
+                    ConvertFrom-Csv $results | Export-Csv ".\FullReports\$compname-$date.csv" -NoTypeInformation
+                    
                 }
                 
 				$NewCompObj.UpToDate = $reshash.Status
