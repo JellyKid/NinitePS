@@ -6,8 +6,8 @@ $mailprefs = @{
             'SmtpServer'   = 'bayportstatebank-com.mail.protection.outlook.com'
 }
 
-if(Test-Path .\UpdateReport.html) {
-    $body = Get-Content .\UpdateReport.html | Out-String
+if(Test-Path .\Report.html) {
+    $body = Get-Content .\Report.html | Out-String
     $mailprefs.Set_Item('Body',$body)
     $mailprefs.Add('BodyAsHtml',$true)
 }

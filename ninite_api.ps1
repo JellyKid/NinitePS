@@ -94,12 +94,14 @@ function parse-results($resulthash,$current) {
 	}
 	
 	#Compare machines old need list to newly parsed and add or remove as needed
-	if ($current) {
+	if ($current -ne 'Unknown') {
 		foreach($item in $current.split(',')) {
 			if(!$needed.Contains($item)){
 				$needed += $item
 			}
 		}
+	} else {
+		$needed = $current
 	}
 	
 	
@@ -180,12 +182,12 @@ $cnu computers need updates
 "@
 
 
-$MyReport | ConvertTo-HTML -PreContent $Pre -PostContent $Post | Out-File UpdateReport.html
+$MyReport | ConvertTo-HTML -PreContent $Pre -PostContent $Post | Out-File Report.html
 }
 
 
 
-if (!$audit -and (Test-Path ComputerList.csv)) {
+if (Test-Path ComputerList.csv) {
 	$CompList = @(Import-Csv ComputerList.csv)
 } else {
 	$CompList = @()
@@ -195,7 +197,7 @@ $CompObj = @{
 	'Name'			= '';
 	'Pingable'		= '';
 	'UpToDate'		= 'Unknown';
-	'Needed'		= $null;
+	'Needed'		= 'Unknown';
 	'LastContact'	= '';
 }
 
@@ -240,11 +242,16 @@ foreach ($computer in $ADList) {
 					$NewCompObj.Installed = $ParsedResults[1]
 				}
 				
+				if ($NewCompObj.Needed -eq 'Unknown' -and $audit) {
+					$NewCompObj.Needed = ''
+				}
+				
 				if($NewCompObj.Needed -eq $null -or $NewCompObj.Needed -eq '') {
 					$NewCompObj.UpToDate = 'Yes'
-				} else {
+				} elseif ($NewCompObj.Needed -ne 'Unknown'){
 					$NewCompObj.UpToDate = 'No'
 				}
+								
 				
 				$NewCompObj.LastContact = Get-Date
 			} else {Write-Host 'No results?'}
@@ -252,17 +259,20 @@ foreach ($computer in $ADList) {
 			
 		}
         else {
-            $NewCompObj.UpToDate = 'UnKnown'
+            $NewCompObj.UpToDate = 'Unknown'
         }
 		
-		if ($CompList -and !$audit){
+		if ($CompList){
 				if ($CompList.Name.Contains($NewCompObj.Name)) {
 					$index = $CompList.Name.IndexOf($NewCompObj.Name)
 					if ($NewCompObj.Pingable) {
 						$CompList[$index].Pingable = $NewCompObj.Pingable
 						$CompList[$index].UpToDate = $NewCompObj.UpToDate
 						$CompList[$index].Needed = $NewCompObj.Needed
-						$CompList[$index].LastContact = $NewCompObj.LastContact	
+						$CompList[$index].LastContact = $NewCompObj.LastContact
+						if ($audit) {
+							$CompList[$index] | Add-Member -NotePropertyName 'Installed' -NotePropertyValue $NewCompObj.Installed -Force
+						}
 					} else {
 						$CompList[$index].Pingable = $NewCompObj.Pingable
 					}
@@ -283,6 +293,7 @@ foreach ($computer in $ADList) {
 	} else {
 		$CompList = $CompList | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed','Installed'
 		BuildReport $CompList $ReportTitle
+		$CompList | Select 'Name','UpToDate','Pingable','LastContact','Needed' | Export-CSV ComputerList.csv -NoTypeInformation
 	}
 	
 }
