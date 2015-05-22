@@ -129,7 +129,6 @@ function Call-Ninite {
 
 function BuildReport ($MyReport,$title) {
 
-Write-Host $MyReport.GetType().Name
 
 #Get Computer Not Updated Count
 $cnu = 0
@@ -192,12 +191,11 @@ $CompObj = @{
 	'UpToDate'		= 'Unknown';
 	'Needed'		= '';
 	'LastContact'	= '';
-	'Installed'		= '';
 }
 
-# if ($audit) {
-	# $CompObj.Add('Installed','')
-# }
+if ($audit) {
+	$CompObj.Add('Installed','')
+}
 
 #START PROGRAM!!!!
 foreach ($computer in $ADList) {
@@ -211,7 +209,7 @@ foreach ($computer in $ADList) {
             
             $results = Call-Ninite $job $NewCompObj.Name
             
-            #Ninite needs to be called /w the audit command no matter what to get the results
+            
 
           			
 			if ($results) {						#PARSE RESULTS
@@ -274,13 +272,10 @@ foreach ($computer in $ADList) {
  if ($CompList) {
 	if (!$audit) {
 		$CompList | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed' | Export-CSV ComputerList.csv -NoTypeInformation
-		BuildReport($CompList,'3rd Party Update Report')
+		BuildReport $CompList '3rd Party Update Report'
 	} else {
 		$CompList = $CompList | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed','Installed'
-		$CompList | Export-CSV ComputerList.csv -NoTypeInformation
-		Write-Host "STUPID 2"
-		Write-Host $CompList.GetType().Name
-		BuildReport($CompList,'Software Audit Report')
+		BuildReport $CompList 'Weekly Software Audit Report'
 	}
 	
 }
