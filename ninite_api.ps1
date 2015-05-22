@@ -129,7 +129,7 @@ function Call-Ninite {
 
 function BuildReport ($MyReport,$title) {
 
-Write-Host $MyReport.GetType()
+Write-Host $MyReport.GetType().Name
 
 #Get Computer Not Updated Count
 $cnu = 0
@@ -174,7 +174,6 @@ $cnu computers need updates
 </div>
 "@
 
-Write-Host $MyReport | Get-Member
 
 $MyReport | ConvertTo-HTML -PreContent $Pre -PostContent $Post | Out-File UpdateReport.html
 }
@@ -267,7 +266,7 @@ foreach ($computer in $ADList) {
 					$CompList += $NewCompObj
 				}
 			} else {
-					$CompList += @($NewCompObj)
+					$CompList += $NewCompObj
 			}
 		
 	}
@@ -277,10 +276,10 @@ foreach ($computer in $ADList) {
 		$CompList | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed' | Export-CSV ComputerList.csv -NoTypeInformation
 		BuildReport($CompList,'3rd Party Update Report')
 	} else {
-		$CompList | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed','Installed' | Export-CSV ComputerList.csv -NoTypeInformation
+		$CompList = $CompList | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed','Installed'
+		$CompList | Export-CSV ComputerList.csv -NoTypeInformation
 		Write-Host "STUPID 2"
-		Write-Host $CompList.GetType()
-		Write-Host $CompList | Get-Member
+		Write-Host $CompList.GetType().Name
 		BuildReport($CompList,'Software Audit Report')
 	}
 	
