@@ -17,19 +17,21 @@ param(
 
 Import-Module ActiveDirectory
 #$ADList = Get-ADComputer -Filter '*' 
-$ADList = Get-ADComputer -Filter {(cn -eq "KARI-DELL")}
+$ADList = Get-ADComputer -Filter {(cn -eq "JS-MSI")}
 
 if($install){
 	$job = @(
 		"/disableshortcuts",
 		"/disableautoupdate"
 	)
+	$ReportTitle = 'Install Report'
 }	
 
 if($uninstall){
 	$job = @(
 		"/uninstall"		
 	)
+	$ReportTitle = 'Uninstall Report'
 }
 
 if($update){
@@ -38,12 +40,14 @@ if($update){
 		"/disableshortcuts",
 		"/disableautoupdate"
 	)
+	$ReportTitle = '3rd Party Update Report'
 }
 
 if($audit){
 	$job = @(
 		"/audit"
 	)
+	$ReportTitle = 'Weekly Software Audit Report'
 }
 
 
@@ -273,13 +277,16 @@ foreach ($computer in $ADList) {
 }
  if ($CompList) {
 	if (!$audit) {
-		$CompList | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed' | Export-CSV ComputerList.csv -NoTypeInformation
-		BuildReport $CompList '3rd Party Update Report'
+		$CompList = $CompList | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed' 
+		$CompList | Export-CSV ComputerList.csv -NoTypeInformation
+		BuildReport $CompList $ReportTitle
 	} else {
 		$CompList = $CompList | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed','Installed'
-		BuildReport $CompList 'Weekly Software Audit Report'
+		BuildReport $CompList $ReportTitle
 	}
 	
 }
+
+
 
 
