@@ -13,7 +13,11 @@ param(
         [Switch]$FullReports
 )
 
+#Get all machines in AD and test their connectivity
 
+Import-Module ActiveDirectory
+#$ADList = Get-ADComputer -Filter '*' 
+$ADList = Get-ADComputer -Filter {(cn -eq "JS-MSI" -or cn -eq "BP-TELLER-001")}
 
 if($install){
 	$job = @(
@@ -33,6 +37,12 @@ if($update){
 		"/updateonly",
 		"/disableshortcuts",
 		"/disableautoupdate"
+	)
+}
+
+if($audit){
+	$job = @(
+		"/audit"
 	)
 }
 
@@ -64,15 +74,33 @@ function create_hash ([array] $doublearray) {
     return $h
 }
 
-function parse-results($resulthash) {
+
+function parse-results($resulthash,$current) {
 	$needed = @()
-	foreach($item in $resulthash.GetEnumerator()) {
+    $installed = @()
+	
+	#Parse Results and add to needed pile or installed
+	foreach($item in $resulthash.GetEnumerator()) { 
 		if ($item.Value.Contains('Update')) {
 			$needed += $item.Name
-		}		
+		}
+        if ($item.Value.Contains('OK')) {
+            $installed += $item.Name
+        }
 	}
-	$returnstring = $needed -Join ','
-	return $returnstring 
+	
+	#Compare machines old need list to newly parsed and add or remove as needed
+	foreach($item in $current.split(',')) {
+		if(!$needed.Contains($item)){
+			$needed += $item
+		}
+	}
+	
+	
+	$returnarray = New-Object string[] 2
+    $returnarray[0] = $needed -Join ','
+    $returnarray[1] = $installed -Join ','
+	return $returnarray
 }
 
 function Call-Ninite {
@@ -87,8 +115,8 @@ function Call-Ninite {
 
 	
 	if(Test-Path Ninite.exe) {
-		Write-Host $job $computer
-        $job += @("/remote",$computer)
+		$job += @("/remote",$computer)
+		Write-Host $job
 		$status = & .\Ninite.exe $job | Write-Output
         
 		$status = $status[1..($status.Count - 1)]  
@@ -99,15 +127,24 @@ function Call-Ninite {
 	}
 }
 
-function BuildReport ($MyReport) {
+function BuildReport ($MyReport,$title) {
+
+Write-Host $MyReport.GetType()
 
 #Get Computer Not Updated Count
 $cnu = 0
-$MyReport.Needed.ForEach({
-    if($_ -ne '' -and $_ -ne $null){
-    $cnu++
-    }
-})
+
+if ($MyReport.Needed.GetType().Name -eq 'String') {
+	if($MyReport.Needed -ne '' -and $MyReport.Needed -ne $null){
+		$cnu++
+	} 
+} else {
+	$MyReport.Needed.ForEach({
+		if($_ -ne '' -and $_ -ne $null){
+		$cnu++
+		}
+	})
+}
 
 $date = Get-Date
 
@@ -123,7 +160,7 @@ $pre = @"
 
 
 <h1>
-3rd Party Update Report 
+$title
 </h1>
 <h2>
 Run on $date
@@ -137,61 +174,52 @@ $cnu computers need updates
 </div>
 "@
 
-$MyReport | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed' | ConvertTo-HTML -PreContent $Pre -PostContent $Post | Out-File UpdateReport.html
+Write-Host $MyReport | Get-Member
+
+$MyReport | ConvertTo-HTML -PreContent $Pre -PostContent $Post | Out-File UpdateReport.html
 }
 
 
 
-if (Test-Path ComputerList.csv) {
+if (!$audit -and (Test-Path ComputerList.csv)) {
 	$CompList = @(Import-Csv ComputerList.csv)
 } else {
 	$CompList = @()
 }
 
 $CompObj = @{
-	'Name'			= $null;
-	'Pingable'		= $null;
-	'UpToDate'		= $null;
-	'Needed'		= $null;
-	'LastContact'	= $null;
+	'Name'			= '';
+	'Pingable'		= '';
+	'UpToDate'		= 'Unknown';
+	'Needed'		= '';
+	'LastContact'	= '';
+	'Installed'		= '';
 }
 
+# if ($audit) {
+	# $CompObj.Add('Installed','')
+# }
 
-
-
-#Get all machines in AD and test their connectivity
-
-Import-Module ActiveDirectory
-#$ADList = Get-ADComputer -Filter '*' 
-$ADList = Get-ADComputer -Filter {(cn -eq "LARRY-DELL")}
-
-
+#START PROGRAM!!!!
 foreach ($computer in $ADList) {
 	if ($computer.Enabled){					
 		$NewCompObj = New-Object -TypeName PSObject -Property $CompObj
 		$NewCompObj.Name = $computer.Name
 		$NewCompObj.Pingable = Test-Connection -ComputerName $NewCompObj.Name -Count 1 -Quiet
-		
-		
+						
 		if ($NewCompObj.Pingable) {			
 			
             
-            if (!$audit) {
-                Call-Ninite $job $NewCompObj.Name
-            }
-
+            $results = Call-Ninite $job $NewCompObj.Name
+            
             #Ninite needs to be called /w the audit command no matter what to get the results
 
-            $job = @("/audit","/silent",".")
-            
-            
-			$results = Call-Ninite $job $NewCompObj.Name
-		
-		
+          			
 			if ($results) {						#PARSE RESULTS
                 
 				$reshash = create_hash($results)
-
+				
+								
                 if($FullReports){
                     $date = Get-Date -UFormat "%m%d%Y-%H%M"
                     $compname = $NewCompObj.Name
@@ -200,11 +228,21 @@ foreach ($computer in $ADList) {
                     
                 }
                 
-				$NewCompObj.UpToDate = $reshash.Status
-				if ($NewCompObj.UpToDate -ne 'OK'){
-					$NewCompObj.Needed  = parse-results($reshash)
-                    $cnu ++
+								
+				if($reshash.Status -eq 'OK') {$reshash.Status = 'Success'} #Change Status to Success so that results can be parsed properly
+				$ParsedResults = parse-results $reshash $NewCompObj.Needed
+				
+				$NewCompObj.Needed = $ParsedResults[0]				
+				if ($audit) {
+					$NewCompObj.Installed = $ParsedResults[1]
 				}
+				
+				if($NewCompObj.Needed -eq $null -or $NewCompObj.Needed -eq '') {
+					$NewCompObj.UpToDate = 'Yes'
+				} else {
+					$NewCompObj.UpToDate = 'No'
+				}
+				
 				$NewCompObj.LastContact = Get-Date
 			} else {Write-Host 'No results?'}
 					
@@ -214,7 +252,7 @@ foreach ($computer in $ADList) {
             $NewCompObj.UpToDate = 'UnKnown'
         }
 		
-		if ($CompList){
+		if ($CompList -and !$audit){
 				if ($CompList.Name.Contains($NewCompObj.Name)) {
 					$index = $CompList.Name.IndexOf($NewCompObj.Name)
 					if ($NewCompObj.Pingable) {
@@ -229,12 +267,23 @@ foreach ($computer in $ADList) {
 					$CompList += $NewCompObj
 				}
 			} else {
-					$CompList += $NewCompObj
+					$CompList += @($NewCompObj)
 			}
 		
 	}
 }
  if ($CompList) {
-	$CompList | Sort-Object Name | Export-CSV ComputerList.csv -NoTypeInformation
-    BuildReport($CompList)
+	if (!$audit) {
+		$CompList | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed' | Export-CSV ComputerList.csv -NoTypeInformation
+		BuildReport($CompList,'3rd Party Update Report')
+	} else {
+		$CompList | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed','Installed' | Export-CSV ComputerList.csv -NoTypeInformation
+		Write-Host "STUPID 2"
+		Write-Host $CompList.GetType()
+		Write-Host $CompList | Get-Member
+		BuildReport($CompList,'Software Audit Report')
+	}
+	
 }
+
+
