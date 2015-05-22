@@ -17,7 +17,7 @@ param(
 
 Import-Module ActiveDirectory
 #$ADList = Get-ADComputer -Filter '*' 
-$ADList = Get-ADComputer -Filter {(cn -eq "JS-MSI" -or cn -eq "BP-TELLER-001")}
+$ADList = Get-ADComputer -Filter {(cn -eq "KARI-DELL")}
 
 if($install){
 	$job = @(
@@ -90,9 +90,11 @@ function parse-results($resulthash,$current) {
 	}
 	
 	#Compare machines old need list to newly parsed and add or remove as needed
-	foreach($item in $current.split(',')) {
-		if(!$needed.Contains($item)){
-			$needed += $item
+	if ($current) {
+		foreach($item in $current.split(',')) {
+			if(!$needed.Contains($item)){
+				$needed += $item
+			}
 		}
 	}
 	
@@ -189,7 +191,7 @@ $CompObj = @{
 	'Name'			= '';
 	'Pingable'		= '';
 	'UpToDate'		= 'Unknown';
-	'Needed'		= '';
+	'Needed'		= $null;
 	'LastContact'	= '';
 }
 
