@@ -1,6 +1,6 @@
 $mailprefs = @{
             'To'           = 'jsommerville@bayportstatebank.com';
-            'Subject'      = '3rd Party Update Report';
+            'Subject'      = 'Ninite Reports';
             'Body'         = 'No Report Found!';
             'From'         = 'ninite@bayportstatebank.com';
             'SmtpServer'   = 'bayportstatebank-com.mail.protection.outlook.com'

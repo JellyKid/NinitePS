@@ -10,14 +10,19 @@ param(
 		[Switch]$update,
 		[Parameter(ValueFromRemainingArguments=$true,Position=0)]
 		[string[]]$product,
-        [Switch]$FullReports
+        [Switch]$FullReports,
+		[Switch]$Machine
 )
 
 #Get all machines in AD and test their connectivity
 
 Import-Module ActiveDirectory
-#$ADList = Get-ADComputer -Filter '*' 
-$ADList = Get-ADComputer -Filter {(cn -eq "JS-MSI")}
+
+if($machine) {
+	$ADList = Get-ADComputer -Filter {(cn -eq $Machine)}
+} else {
+	$ADList = Get-ADComputer -Filter '*'
+}
 
 if($install){
 	$job = @(
@@ -145,30 +150,17 @@ if ($import) {
 	$cnu = 0
 
 	if ($MyReport.Needed.GetType().Name -eq 'String') {
-		if($MyReport.Needed -ne '' -and $MyReport.Needed -ne $null){
+		if($MyReport.Needed -ne 'Unknown' -and $MyReport){
 			$cnu++
 		} 
 	} else {
 		$MyReport.Needed.ForEach({
-			if($_ -ne '' -and $_ -ne $null){
+			if($_ -ne 'Unknown' -and $_){
 			$cnu++
 			}
 		})
 	}
-} else {
-	$joberror = 0
-	if ($MyReport.JobStatus.GetType().Name -eq 'String') {
-		if($MyReport.JobStatus -ne 'OK'){ #report for job completion status
-			$joberror++
-		} 
-	} else {
-		$MyReport.JobStatus.ForEach({
-			if($_ -ne 'OK'){
-			$joberror++
-			}
-		})
-	}
-}
+} 
 
 $date = Get-Date
 
@@ -199,7 +191,7 @@ $cnu computers need updates
 </div>
 "@
 } else {
-if ($joberror -eq 0){
+if (!$NewCompObj.Errors){
 $Post = @"
 <h2>
 Job Completed Successfully!
@@ -209,7 +201,7 @@ Job Completed Successfully!
 } else {
 $Post = @"
 <h2>
-Job Completed with $joberror Errors. See Above.
+Job completed with $joberror errors, see above.
 </h2>
 </div>
 "@
@@ -237,11 +229,13 @@ if ($import) {
 	$CompObj.Add('Installed','')
 	$CompObj.Add('UpToDate','Unknown')
 	$CompObj.Add('Needed','Unknown')
-	$CompObj.Add('LastContact''')
+	$CompObj.Add('LastContact','')
 }
 
 if (!$import) {
 	$CompObj.Add('JobStatus','')
+	$CompObj.Add('Success','')
+	$CompObj.Add('Errors','')
 }
 
 #START LOGIC!!!!
@@ -271,12 +265,14 @@ foreach ($computer in $ADList) {
                     ConvertFrom-Csv $results | Export-Csv ".\FullReports\$compname-$date.csv" -NoTypeInformation
                     
                 }
+				
+				if($reshash.Status -eq 'OK') {$reshash.Status = 'Success'} #Change Status to Success so that results can be parsed properly
                 
 				if ($import) { #Add
-					if($reshash.Status -eq 'OK') {$reshash.Status = 'Success'} #Change Status to Success so that results can be parsed properly
+					 
 					$ParsedResults = parse-results $reshash $NewCompObj.Needed
 					
-					$NewCompObj.Needed = $ParsedResults[0]				
+					$NewCompObj.Needed = $ParsedResults[0]	
 					if ($audit) {
 						$NewCompObj.Installed = $ParsedResults[1]
 					}
@@ -292,9 +288,23 @@ foreach ($computer in $ADList) {
 					}					
 					$NewCompObj.LastContact = Get-Date
 				} else {
+
 					$NewCompObj.JobStatus = $reshash.Status
-					<# if (!$NewCompObj.JobStatus.Contains('OK')) {
-					} #>
+					
+					foreach($item in $reshash.GetEnumerator()) { 
+						if ($item.Value.Contains('OK')) {
+							$NewCompObj.Success += $item.Name
+							$NewCompObj.Success += "; "
+						} else {
+							if (!$item.Name.Equals('Computer') -and !$item.Name.Equals('Status')) {
+								$NewCompObj.Errors += $item.Name
+								$NewCompObj.Errors += " - "
+								$NewCompObj.Errors += $item.Value
+								$NewCompObj.Errors += ";`n"
+							}
+						}
+					}
+					 
 				}
 					
 			} else {Write-Host 'No results?'}
@@ -330,7 +340,7 @@ foreach ($computer in $ADList) {
 }
  if ($CompList) {
 	if (!$import) {
-		$CompList = $CompList | Sort-Object UpToDate | Select 'Name','Pingable','JobStatus' 
+		$CompList = $CompList | Sort-Object UpToDate | Select 'Name','JobStatus','Pingable','Success','Errors'
 		BuildReport $CompList $ReportTitle
 	} else {
 		$CompList = $CompList | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed','Installed'
