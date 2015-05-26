@@ -41,6 +41,7 @@ if($update){
 		"/disableautoupdate"
 	)
 	$ReportTitle = '3rd Party Update Report'
+	$import = $true
 }
 
 if($audit){
@@ -48,6 +49,7 @@ if($audit){
 		"/audit"
 	)
 	$ReportTitle = 'Weekly Software Audit Report'
+	$import = $true
 }
 
 
@@ -139,18 +141,33 @@ function BuildReport ($MyReport,$title) {
 
 
 #Get Computer Not Updated Count
-$cnu = 0
+if ($import) {
+	$cnu = 0
 
-if ($MyReport.Needed.GetType().Name -eq 'String') {
-	if($MyReport.Needed -ne '' -and $MyReport.Needed -ne $null){
-		$cnu++
-	} 
+	if ($MyReport.Needed.GetType().Name -eq 'String') {
+		if($MyReport.Needed -ne '' -and $MyReport.Needed -ne $null){
+			$cnu++
+		} 
+	} else {
+		$MyReport.Needed.ForEach({
+			if($_ -ne '' -and $_ -ne $null){
+			$cnu++
+			}
+		})
+	}
 } else {
-	$MyReport.Needed.ForEach({
-		if($_ -ne '' -and $_ -ne $null){
-		$cnu++
-		}
-	})
+	$joberror = 0
+	if ($MyReport.JobStatus.GetType().Name -eq 'String') {
+		if($MyReport.JobStatus -ne 'OK'){ #report for job completion status
+			$joberror++
+		} 
+	} else {
+		$MyReport.JobStatus.ForEach({
+			if($_ -ne 'OK'){
+			$joberror++
+			}
+		})
+	}
 }
 
 $date = Get-Date
@@ -174,12 +191,30 @@ Run on $date
 </h2>
 "@
 
+if ($import) {
 $Post = @"
 <h2>
 $cnu computers need updates
 </h2>
 </div>
 "@
+} else {
+if ($joberror -eq 0){
+$Post = @"
+<h2>
+Job Completed Successfully!
+</h2>
+</div>
+"@
+} else {
+$Post = @"
+<h2>
+Job Completed with $joberror Errors. See Above.
+</h2>
+</div>
+"@
+}
+}
 
 
 $MyReport | ConvertTo-HTML -PreContent $Pre -PostContent $Post | Out-File Report.html
@@ -187,7 +222,7 @@ $MyReport | ConvertTo-HTML -PreContent $Pre -PostContent $Post | Out-File Report
 
 
 
-if (Test-Path ComputerList.csv) {
+if ($import -and (Test-Path ComputerList.csv)) {
 	$CompList = @(Import-Csv ComputerList.csv)
 } else {
 	$CompList = @()
@@ -195,17 +230,21 @@ if (Test-Path ComputerList.csv) {
 
 $CompObj = @{
 	'Name'			= '';
-	'Pingable'		= '';
-	'UpToDate'		= 'Unknown';
-	'Needed'		= 'Unknown';
-	'LastContact'	= '';
+	'Pingable'		= '';	
 }
 
-if ($audit) {
+if ($import) {
 	$CompObj.Add('Installed','')
+	$CompObj.Add('UpToDate','Unknown')
+	$CompObj.Add('Needed','Unknown')
+	$CompObj.Add('LastContact''')
 }
 
-#START PROGRAM!!!!
+if (!$import) {
+	$CompObj.Add('JobStatus','')
+}
+
+#START LOGIC!!!!
 foreach ($computer in $ADList) {
 	if ($computer.Enabled){					
 		$NewCompObj = New-Object -TypeName PSObject -Property $CompObj
@@ -233,36 +272,40 @@ foreach ($computer in $ADList) {
                     
                 }
                 
-								
-				if($reshash.Status -eq 'OK') {$reshash.Status = 'Success'} #Change Status to Success so that results can be parsed properly
-				$ParsedResults = parse-results $reshash $NewCompObj.Needed
-				
-				$NewCompObj.Needed = $ParsedResults[0]				
-				if ($audit) {
-					$NewCompObj.Installed = $ParsedResults[1]
+				if ($import) { #Add
+					if($reshash.Status -eq 'OK') {$reshash.Status = 'Success'} #Change Status to Success so that results can be parsed properly
+					$ParsedResults = parse-results $reshash $NewCompObj.Needed
+					
+					$NewCompObj.Needed = $ParsedResults[0]				
+					if ($audit) {
+						$NewCompObj.Installed = $ParsedResults[1]
+					}
+					
+					if ($NewCompObj.Needed -eq 'Unknown' -and $audit) {
+						$NewCompObj.Needed = ''
+					}
+					
+					if($NewCompObj.Needed -eq $null -or $NewCompObj.Needed -eq '') {
+						$NewCompObj.UpToDate = 'Yes'
+					} elseif ($NewCompObj.Needed -ne 'Unknown'){
+						$NewCompObj.UpToDate = 'No'
+					}					
+					$NewCompObj.LastContact = Get-Date
+				} else {
+					$NewCompObj.JobStatus = $reshash.Status
+					<# if (!$NewCompObj.JobStatus.Contains('OK')) {
+					} #>
 				}
-				
-				if ($NewCompObj.Needed -eq 'Unknown' -and $audit) {
-					$NewCompObj.Needed = ''
-				}
-				
-				if($NewCompObj.Needed -eq $null -or $NewCompObj.Needed -eq '') {
-					$NewCompObj.UpToDate = 'Yes'
-				} elseif ($NewCompObj.Needed -ne 'Unknown'){
-					$NewCompObj.UpToDate = 'No'
-				}
-								
-				
-				$NewCompObj.LastContact = Get-Date
+					
 			} else {Write-Host 'No results?'}
 					
 			
 		}
         else {
-            $NewCompObj.UpToDate = 'Unknown'
+			if ($import) {$NewCompObj.UpToDate = 'Unknown'}
         }
 		
-		if ($CompList){
+		if ($CompList -and $import){
 				if ($CompList.Name.Contains($NewCompObj.Name)) {
 					$index = $CompList.Name.IndexOf($NewCompObj.Name)
 					if ($NewCompObj.Pingable) {
@@ -286,9 +329,8 @@ foreach ($computer in $ADList) {
 	}
 }
  if ($CompList) {
-	if (!$audit) {
-		$CompList = $CompList | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed' 
-		$CompList | Export-CSV ComputerList.csv -NoTypeInformation
+	if (!$import) {
+		$CompList = $CompList | Sort-Object UpToDate | Select 'Name','Pingable','JobStatus' 
 		BuildReport $CompList $ReportTitle
 	} else {
 		$CompList = $CompList | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed','Installed'
