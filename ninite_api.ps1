@@ -11,18 +11,22 @@ param(
 		[Parameter(ValueFromRemainingArguments=$true,Position=0)]
 		[string[]]$product,
         [Switch]$FullReports,
-		[Switch]$Machine
+		[string]$Machine
 )
+
 
 #Get all machines in AD and test their connectivity
 
 Import-Module ActiveDirectory
+ 
 
 if($machine) {
 	$ADList = Get-ADComputer -Filter {(cn -eq $Machine)}
 } else {
 	$ADList = Get-ADComputer -Filter '*'
 }
+
+ 
 
 if($install){
 	$job = @(
@@ -66,7 +70,7 @@ if($product){
 }
 
 
-
+ 
 	
 
 function create_hash ([array] $doublearray) {
@@ -89,6 +93,7 @@ function create_hash ([array] $doublearray) {
 function parse-results($resulthash,$current) {
 	$needed = @()
     $installed = @()
+	$errors = ''
 	
 	#Parse Results and add to needed pile or installed
 	foreach($item in $resulthash.GetEnumerator()) { 
@@ -98,23 +103,30 @@ function parse-results($resulthash,$current) {
         if ($item.Value.Contains('OK')) {
             $installed += $item.Name
         }
+		if ($item.Value.Contains('program running')) {
+			$needed += $item.Name
+			$errors += $item.Name
+			$errors += " - "
+			$errors += $item.Value
+			$errors += ";`n"
+		}
 	}
 	
+	if ($current -eq 'Unknown') {$current = ''}
 	#Compare machines old need list to newly parsed and add or remove as needed
-	if ($current -ne 'Unknown') {
+	if ($current) {
 		foreach($item in $current.split(',')) {
 			if(!$needed.Contains($item)){
 				$needed += $item
 			}
 		}
-	} else {
-		$needed = $current
-	}
+	} 
 	
 	
-	$returnarray = New-Object string[] 2
+	$returnarray = New-Object string[] 3
     $returnarray[0] = $needed -Join ','
     $returnarray[1] = $installed -Join ','
+	$returnarray[2] = $errors
 	return $returnarray
 }
 
@@ -212,7 +224,7 @@ Job completed with $joberror errors, see above.
 $MyReport | ConvertTo-HTML -PreContent $Pre -PostContent $Post | Out-File Report.html
 }
 
-
+ 
 
 if ($import -and (Test-Path ComputerList.csv)) {
 	$CompList = @(Import-Csv ComputerList.csv)
@@ -224,9 +236,15 @@ $CompObj = @{
 	'Name'			= '';
 	'Pingable'		= '';	
 }
-
-if ($import) {
+ 
+if ($audit) {
 	$CompObj.Add('Installed','')
+}
+
+if ($update) {
+	$CompObj.Add('Error','')
+}
+if ($import) {
 	$CompObj.Add('UpToDate','Unknown')
 	$CompObj.Add('Needed','Unknown')
 	$CompObj.Add('LastContact','')
@@ -237,10 +255,13 @@ if (!$import) {
 	$CompObj.Add('Success','')
 	$CompObj.Add('Errors','')
 }
-
+ 
 #START LOGIC!!!!
 foreach ($computer in $ADList) {
-	if ($computer.Enabled){					
+	 
+	if ($computer.Enabled){	
+		
+
 		$NewCompObj = New-Object -TypeName PSObject -Property $CompObj
 		$NewCompObj.Name = $computer.Name
 		$NewCompObj.Pingable = Test-Connection -ComputerName $NewCompObj.Name -Count 1 -Quiet
@@ -268,26 +289,28 @@ foreach ($computer in $ADList) {
 				
 				if($reshash.Status -eq 'OK') {$reshash.Status = 'Success'} #Change Status to Success so that results can be parsed properly
                 
-				if ($import) { #Add
+				if ($import) { #If audit or update
 					 
 					$ParsedResults = parse-results $reshash $NewCompObj.Needed
 					
-					$NewCompObj.Needed = $ParsedResults[0]	
+					$NewCompObj.Needed = $ParsedResults[0]
+					if ($NewCompObj.Needed -eq 'Unknown') {$NewCompObj.Needed = ''}
+					
 					if ($audit) {
-						$NewCompObj.Installed = $ParsedResults[1]
+						$NewCompObj.Installed = $ParsedResults[1]						
+					} else {
+						$NewCompObj.Error = $ParsedResults[2]
 					}
-					
-					if ($NewCompObj.Needed -eq 'Unknown' -and $audit) {
-						$NewCompObj.Needed = ''
-					}
-					
-					if($NewCompObj.Needed -eq $null -or $NewCompObj.Needed -eq '') {
+
+					if($NewCompObj.Needed -eq '') {
 						$NewCompObj.UpToDate = 'Yes'
 					} elseif ($NewCompObj.Needed -ne 'Unknown'){
 						$NewCompObj.UpToDate = 'No'
-					}					
+					}
+					
 					$NewCompObj.LastContact = Get-Date
-				} else {
+					
+				} else { #if Install or uninstall
 
 					$NewCompObj.JobStatus = $reshash.Status
 					
@@ -325,6 +348,8 @@ foreach ($computer in $ADList) {
 						$CompList[$index].LastContact = $NewCompObj.LastContact
 						if ($audit) {
 							$CompList[$index] | Add-Member -NotePropertyName 'Installed' -NotePropertyValue $NewCompObj.Installed -Force
+						} else {
+							$CompList[$index] | Add-Member -NotePropertyName 'Error' -NotePropertyValue $NewCompObj.Error -Force
 						}
 					} else {
 						$CompList[$index].Pingable = $NewCompObj.Pingable
@@ -342,10 +367,19 @@ foreach ($computer in $ADList) {
 	if (!$import) {
 		$CompList = $CompList | Sort-Object UpToDate | Select 'Name','JobStatus','Pingable','Success','Errors'
 		BuildReport $CompList $ReportTitle
-	} else {
+	} 
+	
+	if ($audit)
+	{
 		$CompList = $CompList | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed','Installed'
 		BuildReport $CompList $ReportTitle
 		$CompList | Select 'Name','UpToDate','Pingable','LastContact','Needed' | Export-CSV ComputerList.csv -NoTypeInformation
+	}
+	
+	if ($update)
+	{
+		$CompList = $CompList | Sort-Object UpToDate | Select 'Name','UpToDate','Pingable','LastContact','Needed','Error'
+		BuildReport $CompList $ReportTitle		
 	}
 	
 }
