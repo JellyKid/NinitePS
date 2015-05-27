@@ -17,6 +17,8 @@ param(
 
 #Get all machines in AD and test their connectivity
 
+Push-Location $PsScriptRoot
+
 Import-Module ActiveDirectory
  
 
@@ -383,6 +385,8 @@ foreach ($computer in $ADList) {
 	}
 	
 }
+
+Pop-Location
 
 
 
