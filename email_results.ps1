@@ -6,6 +6,8 @@ $mailprefs = @{
             'SmtpServer'   = 'bayportstatebank-com.mail.protection.outlook.com'
 }
 
+Push-Location $PsScriptRoot
+
 if(Test-Path .\Report.html) {
     $body = Get-Content .\Report.html | Out-String
     $mailprefs.Set_Item('Body',$body)
@@ -13,3 +15,5 @@ if(Test-Path .\Report.html) {
 }
 
 Send-MailMessage @mailprefs
+
+Pop-Location
