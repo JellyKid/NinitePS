@@ -29,7 +29,7 @@ if($machine) {
 }
 
  
-
+#--- Start setting job options
 if($install){
 	$job = @(
 		"/disableshortcuts",
@@ -71,8 +71,9 @@ if($product){
     $job += $product
 }
 
-
+#--- End setting job options
  
+#--- Start helper functions
 function combine($string1, $string2) {
 	$old = {$string1 -split ','}.Invoke()
 	$new = {$string2 -split ','}.Invoke()
@@ -106,7 +107,6 @@ function parse-results($resulthash) {
     $installed = @()
 	$errors = ''
 	
-	#Parse Results and add to needed pile or installed
 	foreach($item in $resulthash.GetEnumerator()) { 
 		if ($item.Value.Contains('Update')) {
 			$needed += $item.Name
@@ -129,6 +129,8 @@ function parse-results($resulthash) {
 	$returnarray[2] = $errors
 	return $returnarray
 }
+
+#--- End helper functions
 
 function Call-Ninite {
 
@@ -157,21 +159,18 @@ function Call-Ninite {
 function BuildReport ($MyReport,$title) {
 
 $footer = ""
+$header = ""
+
 #Get Computer Not Updated Count
 if ($audit) {
 	$cnu = 0
-
-	if ($MyReport.UpdatesNeeded.GetType().Name -eq 'String') {
-		if($MyReport.UpdatesNeeded -ne 'Never Checked' -and $MyReport.UpdatesNeeded){
-			$cnu = 800
-		} 
-	} else {
-		$MyReport.UpdatesNeeded.ForEach({
-			if($_ -ne 'Never Checked' -and $_){
+	
+	foreach ($comp in $MyReport){
+		if ($comp.UpdatesNeeded -and ($comp.UpdatesNeeded -ne 'Never Checked')){
 			$cnu++
-			}
-		})
+		}
 	}
+	
 	$footer = "$cnu computers need updates"
 } 
 
@@ -215,7 +214,7 @@ $MyReport | ConvertTo-HTML -PreContent $Pre -PostContent $Post | Out-File Report
  
 
 #Check and see if machines have already been audited and recorded
-$ComputerStats = if (Test-Path ComputerStats.csv) {@(Import-Csv ComputerStats.csv)} else {$null}
+$ComputerStats = if (Test-Path ComputerStats.csv) {@(Import-Csv ComputerStats.csv)} else {,@()}
 
 #Create object to store working machines in
 $CurrentList = @()
@@ -237,7 +236,7 @@ if ($product) {
 	$CompObj.Add('Product','')
 }
  
-#START LOGIC!!!!
+#--- Start Main Logic
 foreach ($computer in $ADList) {
 	 
 	if ($computer.Enabled){	
@@ -296,9 +295,10 @@ foreach ($computer in $ADList) {
 		$CurrentList += $NewCompObj
 		
 		#This next if/else block compares current computer information to stored
-		#and puts the information back into stored		
-		if ($ComputerStats) {
-			if ($ComputerStats.Name.Contains($NewCompObj.Name)){
+		#and puts the information back into stored
+		
+		if ($ComputerStats -and $ComputerStats.Name.Contains($NewCompObj.Name)) {
+			
 				$i = $ComputerStats.Name.IndexOf($NewCompObj.Name)
 				$ComputerStats[$i].Connectivity = $NewCompObj.Connectivity
 				$ComputerStats[$i].LastContact = $NewCompObj.LastContact
@@ -306,14 +306,13 @@ foreach ($computer in $ADList) {
 				$ComputerStats[$i].UpToDate = combine $ComputerStats[$i].UpToDate $NewCompObj.UpToDate
 				$ComputerStats[$i].UpdatesNeeded = combine $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpdatesNeeded
 				
-			} 
 		} else {
 			$ComputerStats += $NewCompObj | Select 'Name','Connectivity','LastContact','UpToDate','UpdatesNeeded','Error'
 		}	
 	}
 }
 
-
+#--- End Main Logic
 
 if (!$ComputerStats -or !$CurrentList) {
 	Write-Error 'Missing Job information. Something went wrong.'
