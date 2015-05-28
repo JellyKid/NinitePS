@@ -75,15 +75,26 @@ if($product){
  
 #--- Start helper functions
 function combine($string1, $string2) {
-	$old = {$string1 -split ','}.Invoke()
-	$new = {$string2 -split ','}.Invoke()
-	foreach ($item in $old) {
-		if ($new -notcontains $item) {
-			$new.add($item)
+	$array1 = {$string1 -split ','}.Invoke()
+	$array2 = {$string2 -split ','}.Invoke()
+	foreach ($item in $array2) {
+		if ($array1 -notcontains $item) {
+			$array1.add($item)
 		}
 	}
-	return ($new -join ',')
-}	
+	return ($array1 -join ',')
+}
+
+function exclude($string1, $string2) {
+	$array1 = {$string1 -split ','}.Invoke()
+	$array2 = {$string2 -split ','}.Invoke()
+	foreach ($item in $array2) {
+		if ($array1 -contains $item) {
+			$array1.remove($item)
+		}
+	}
+	return ($array1 -join ',')
+}
 
 function create_hash ([array] $doublearray) {
 	$keys = $doublearray[0].split(",")
@@ -161,7 +172,7 @@ function BuildReport ($MyReport,$title) {
 $footer = ""
 $header = ""
 
-#Get Computer Not Updated Count
+#Create footer and header
 if ($audit) {
 	$cnu = 0
 	
@@ -172,7 +183,24 @@ if ($audit) {
 	}
 	
 	$footer = "$cnu computers need updates"
-} 
+} else {
+	$header += "$jobname - $product"
+	$joberrors = 0
+	
+	foreach ($comp in $MyReport){
+		if ($comp.JobStatus -ne 'Success'){
+			$joberrors ++
+		}
+	}
+	
+	if ($joberrors){
+		$footer = "Job completed with $joberrors errors, please see above"
+	} else {
+		$footer = "Job completed successfully!"
+	}
+}
+
+
 
 $date = Get-Date
 
@@ -190,6 +218,10 @@ $pre = @"
 <h1>
 $title
 </h1>
+
+<h2>
+$header
+</h2>
 
 <h2>
 Run on $date
@@ -303,8 +335,20 @@ foreach ($computer in $ADList) {
 				$ComputerStats[$i].Connectivity = $NewCompObj.Connectivity
 				$ComputerStats[$i].LastContact = $NewCompObj.LastContact
 				$ComputerStats[$i].Error = $NewCompObj.Error
-				$ComputerStats[$i].UpToDate = combine $ComputerStats[$i].UpToDate $NewCompObj.UpToDate
-				$ComputerStats[$i].UpdatesNeeded = combine $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpdatesNeeded
+				<# $ComputerStats[$i].UpToDate = combine $ComputerStats[$i].UpToDate $NewCompObj.UpToDate
+				$ComputerStats[$i].UpdatesNeeded = combine $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpdatesNeeded #>
+				if ($uninstall) {
+					$ComputerStats[$i].UpToDate = exclude $ComputerStats[$i].UpToDate $NewCompObj.UpToDate
+					$ComputerStats[$i].UpdatesNeeded = exclude $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpToDate
+				}
+				if ($install -or $update) {
+					$ComputerStats[$i].UpToDate = combine $ComputerStats[$i].UpToDate $NewCompObj.UpToDate
+					$ComputerStats[$i].UpdatesNeeded = exclude $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpToDate
+				}
+				if ($audit) {
+					$ComputerStats[$i].UpToDate = $NewCompObj.UpToDate
+					$ComputerStats[$i].UpdatesNeeded = $NewCompObj.UpdatesNeeded
+				}
 				
 		} else {
 			$ComputerStats += $NewCompObj | Select 'Name','Connectivity','LastContact','UpToDate','UpdatesNeeded','Error'
