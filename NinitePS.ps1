@@ -83,25 +83,25 @@ if($product){
  
 #--- Start helper functions
 function include($string1, $string2) {
-	$array1 = {$string1 -split ','}.Invoke()
-	$array2 = {$string2 -split ','}.Invoke()
+	$array1 = {$string1 -split ', '}.Invoke()
+	$array2 = {$string2 -split ', '}.Invoke()
 	foreach ($item in $array2) {
 		if ($array1 -notcontains $item) {
 			$array1.add($item)
 		}
 	}
-	return ($array1 -join ',')
+	return ($array1 -join ', ')
 }
 
 function exclude($string1, $string2) {
-	$array1 = {$string1 -split ','}.Invoke()
-	$array2 = {$string2 -split ','}.Invoke()
+	$array1 = {$string1 -split ', '}.Invoke()
+	$array2 = {$string2 -split ', '}.Invoke()
 	foreach ($item in $array2) {
 		if ($array1 -contains $item) {
 			$array1.remove($item) | out-null
 		}
 	}
-	return ($array1 -join ',')
+	return ($array1 -join ', ')
 }
 
 function create_hash ([array] $doublearray) {
@@ -143,8 +143,8 @@ function parse-results($resulthash) {
 	}
 	
 	$returnarray = New-Object string[] 3
-    $returnarray[0] = $needed -Join ','
-    $returnarray[1] = $installed -Join ','
+    $returnarray[0] = $needed -join ', '
+    $returnarray[1] = $installed -join ', '
 	$returnarray[2] = $errors
 	return $returnarray
 }
