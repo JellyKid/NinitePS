@@ -275,9 +275,6 @@ if (!$audit) {
 	$CompObj.Add('JobStatus','')
 }
 
-if ($product) {
-	$CompObj.Add('Product','')
-}
  
 #--- Start Main Logic
 foreach ($computer in $ADList) {
@@ -313,7 +310,7 @@ foreach ($computer in $ADList) {
             
           	#This next if/else block parses and stores the results in the 
 			#newly created computer object
-			if ($success -eq 'OK') {	
+			if ($success -eq 'OK') {
                 				
 				
 				$ResultsHash = create_hash($results)
@@ -326,13 +323,10 @@ foreach ($computer in $ADList) {
 				$NewCompObj.UpdatesNeeded = $ParsedResults[0]
 				$NewCompObj.UpToDate = $ParsedResults[1]
 				$NewCompObj.Error = $ParsedResults[2]
+								
 				
 				if (!$audit) {
 					$NewCompObj.JobStatus = $ResultsHash.Status
-				}
-
-				if ($product) {
-					$NewCompObj.Product = $NewCompObj.UpToDate
 				}
 									
 			} else {
@@ -351,10 +345,7 @@ foreach ($computer in $ADList) {
             }
 			
 		}
-		
-		#Add the current computer object to the list for reports
-		$CurrentList += $NewCompObj
-		
+
 		#This next if/else block compares current computer information to stored
 		#and puts the information back into stored
 		
@@ -383,7 +374,18 @@ foreach ($computer in $ADList) {
 				
 		} else {
 			$ComputerStats += $NewCompObj | Select 'Name','Connectivity','LastContact','UpToDate','UpdatesNeeded','Error'
-		}	
+		}
+		
+		#Add content to make reports look better
+		
+		if (!$audit) {
+			if (!$NewCompObj.UpToDate){$NewCompObj.UpToDate = "None"}
+			if (!$NewCompObj.UpdatesNeeded){$NewCompObj.UpdatesNeeded = "None"}
+		} 
+		
+		#Add the current computer object to the list for reports
+		$CurrentList += $NewCompObj
+		
 	}
 }
 
@@ -396,18 +398,29 @@ if (!$ComputerStats -or !$CurrentList) {
 #Export known and updated computer status list to CSV for future retrieval
 $ComputerStats | Sort-Object 'Name' | Select 'Name','Connectivity','LastContact','UpdatesNeeded','UpToDate','Error' | Export-CSV ComputerStats.csv
 
+#Add product to make reports look better
+
+if (!$product) {
+	$product = "All Software"
+}
+
 #Build reports based on job
+
 
 if ($audit) {
 	$MyReport = $ComputerStats | Sort-Object 'Name' | Select 'Name','Connectivity','LastContact','UpdatesNeeded','UpToDate','Error' 
 }
 
 if ($update) {
-	$MyReport = $CurrentList | Sort-Object 'JobStatus' -Descending | Select 'Name','JobStatus','Connectivity','UpToDate','UpdatesNeeded','Error'
+	$MyReport = $CurrentList | Sort-Object 'JobStatus' -Descending | Select 'Name','JobStatus','Connectivity',@{Name='Installed';Expression={$_.UpToDate}},'UpdatesNeeded','Error'
 }
 
-if ($install -or $uninstall) {
-	$MyReport = $CurrentList | Sort-Object 'JobStatus' -Descending | Select 'Name','JobStatus','Connectivity','Product','Error'
+if ($install) {
+	$MyReport = $CurrentList | Sort-Object 'JobStatus' -Descending | Select 'Name','JobStatus','Connectivity',@{Name='Installed';Expression={$_.UpToDate}},'Error'
+}
+
+if ($uninstall) {
+	$MyReport = $CurrentList | Sort-Object 'JobStatus' -Descending | Select 'Name','JobStatus','Connectivity',@{Name='Uninstalled';Expression={$_.UpToDate}},'Error'
 }
 
 BuildReport $MyReport $ReportTitle
