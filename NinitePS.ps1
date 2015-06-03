@@ -27,15 +27,6 @@ If (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 
 Push-Location $PsScriptRoot
 
-Import-Module ActiveDirectory
- 
-
-if($machine) {
-	$ADList = Get-ADComputer -Filter {(cn -eq $Machine)}
-} else {
-	$ADList = Get-ADComputer -Filter '*'
-}
-
  
 #--- Start setting job options
 if($install){
@@ -273,6 +264,16 @@ $CompObj = @{
 
 if (!$audit) {
 	$CompObj.Add('JobStatus','')
+}
+
+
+Import-Module ActiveDirectory
+ 
+
+if($machine) {
+	$ADList = Get-ADComputer -Filter {(cn -eq $Machine)}
+} else {
+	$ADList = Get-ADComputer -Filter '*'
 }
 
  
