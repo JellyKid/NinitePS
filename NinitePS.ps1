@@ -123,18 +123,21 @@ function parse-results($resulthash) {
 	$errors = ''
 	
 	foreach($item in $resulthash.GetEnumerator()) { 
-		if ($item.Value.Contains('Update')) {
-			$needed += $item.Name
-		}
-        if ($item.Value.Contains('OK')) {
-            $installed += $item.Name
-        }
-		if ($item.Value.Contains('program running')) {
-			$needed += $item.Name
-			$errors += $item.Name
-			$errors += " - "
-			$errors += $item.Value
-			$errors += ";`n"
+		if($item.name -notcontains 'Computer') {
+			switch -wildcard ($item.value) {
+				"Update*"{$needed += $item.Name}
+				"OK*"{$installed += $item.Name}
+				"Skipped*"{}
+				"Partial*"{}
+				"Success*"{}
+				default {
+					$needed += $item.Name
+					$errors += $item.Name
+					$errors += " - "
+					$errors += $item.Value
+					$errors += ";`n"
+				}
+			}
 		}
 	}
 	
@@ -357,7 +360,7 @@ foreach ($computer in $ADList) {
 		
 		if ($ComputerStats -and $ComputerStats.Name.Contains($NewCompObj.Name)) {
 		
-				if (($NewCompObj.UpdatesNeeded -eq 'Never Checked') -and !$product){$NewCompObj.UpdatesNeeded = ''}
+				if (($NewCompObj.UpdatesNeeded -eq 'Never Checked') -and $NewCompObj.connectivity){$NewCompObj.UpdatesNeeded = ''}
 			
 				$i = $ComputerStats.Name.IndexOf($NewCompObj.Name)
 				$ComputerStats[$i].Connectivity = $NewCompObj.Connectivity
