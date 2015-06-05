@@ -22,6 +22,11 @@ If (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
     Break
 }
 
+if(($install -or $uninstall) -and !$product) {
+	Write-Warning "You must specify a product when installing or uninstalling"
+	Break
+}
+
 
 #Get all machines in AD and test their connectivity
 
@@ -351,6 +356,8 @@ foreach ($computer in $ADList) {
 		#and puts the information back into stored
 		
 		if ($ComputerStats -and $ComputerStats.Name.Contains($NewCompObj.Name)) {
+		
+				if (($NewCompObj.UpdatesNeeded -eq 'Never Checked') -and !$product){$NewCompObj.UpdatesNeeded = ''}
 			
 				$i = $ComputerStats.Name.IndexOf($NewCompObj.Name)
 				$ComputerStats[$i].Connectivity = $NewCompObj.Connectivity
@@ -379,7 +386,7 @@ foreach ($computer in $ADList) {
 		
 		#Add content to make reports look better
 		
-		if (!$audit) {
+		if (!$audit -and $NewCompObj.Connectivity) {
 			if (!$NewCompObj.UpToDate){$NewCompObj.UpToDate = "None"}
 			if (!$NewCompObj.UpdatesNeeded){$NewCompObj.UpdatesNeeded = "None"}
 		} 
