@@ -33,7 +33,7 @@ if(($install -or $uninstall) -and !$product) {
 Push-Location $PsScriptRoot
 
  
-#--- Start setting job options
+#region setting job options
 if($install){
 	$job = @(
 		"/disableshortcuts",
@@ -75,9 +75,9 @@ if($product){
     $job += $product
 }
 
-#--- End setting job options
+#endregion setting job options
  
-#--- Start helper functions
+#region helper functions
 function include($string1, $string2) {
 	$array1 = {$string1 -split ', '}.Invoke()
 	$array2 = {$string2 -split ', '}.Invoke()
@@ -150,7 +150,7 @@ function parse-results($resulthash) {
 	return $returnarray
 }
 
-#--- End helper functions
+#endregion helper functions
 
 function Call-Ninite {
 
@@ -163,12 +163,12 @@ function Call-Ninite {
 	)
 
 	
-	if(Test-Path Ninite.exe) {
+	if(Test-Path ninitepro.exe) {
 		$job += @("/remote",$computer)
 		Write-Host $job
-		$status = & .\Ninite.exe $job | Write-Output
+		$status = & .\ninitepro.exe $job | Write-Output
 	} else {
-		Write-Error "Error Ninite.exe doesn't exist in this path"
+		Write-Error "Error ninitepro.exe doesn't exist in this path"
 		return $null
 	}
 	
@@ -287,7 +287,7 @@ if($machine) {
 }
 
  
-#--- Start Main Logic
+#region Main Logic
 foreach ($computer in $ADList) {
 	 
 	if ($computer.Enabled){	
@@ -402,7 +402,7 @@ foreach ($computer in $ADList) {
 	}
 }
 
-#--- End Main Logic
+#endregion Main Logic
 
 if (!$ComputerStats -or !$CurrentList) {
 	Write-Error 'Missing Job information. Something went wrong.'
