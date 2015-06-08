@@ -1,14 +1,12 @@
 # NinitePS
 
-Powershell wrapper for [Ninite Pro](http://www.ninite.com/pro) It keeps track of currently installed software and makes pretty reports for email.
+is a Powershell wrapper for [Ninite Pro](http://www.ninite.com/pro) that will search your AD structure for enabled machines, test their connectivity, make specified software changes, store those changes in a CSV and create a pretty HTML report. 
 
 ##Install
 
 Just include NinitePS.ps1 in the same directory as ninitepro.exe
 
 ##Usage
-
-NinitePS is a wrapper that will search your AD structure for enabled machines, test their connectivity, make specified software changes, store those changes in a CSV and create a job completion report. The following are script arguments to make the whole thing work.
 
 ####-Audit
 Scans all machines in your environment for Ninite supported software for out of date and installed software. It then stores it's findings in ComputerStats.csv in the same directory and creates an HTML report called Report.html
@@ -32,12 +30,12 @@ Specify which machine to work with, otherwise it includes all machines found in 
 Creates a CSV under the reports directory of Ninite output. Useful for debugging.
 
 ##Examples
-Audit all machines in domain
+Audit all machines in the domain
 
 *.\NinitePS.ps1 -audit*
 
 
-Install Greenshot on all machines in domain
+Install Greenshot on all machines in the domain
 
 *.\NinitePS.ps1 -install -product greenshot*
 
