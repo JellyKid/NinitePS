@@ -50,7 +50,7 @@ Update Oracle Java and Adobe Flash on PC2
 *.\NinitePS.ps1 -update -product java flash -machine PC2*
 
 
-Updated PC3 in ComputerStats.csv 
+Audit PC3 and update info in ComputerStats.csv
 
 *.\NinitePS.ps1 -audit -machine PC3*
 
