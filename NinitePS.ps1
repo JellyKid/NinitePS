@@ -123,12 +123,14 @@ function parse-results($resulthash) {
 	$errors = ''
 	
 	foreach($item in $resulthash.GetEnumerator()) { 
-		if($item.name -notcontains 'Computer') {
+		if($item.name -notcontains 'Computer' -and $item.name -notcontains 'Status') {
 			switch -wildcard ($item.value) {
 				"Update*"{$needed += $item.Name}
+				"Partial*"{$needed += $item.Name}
 				"OK*"{$installed += $item.Name}
-				"Skipped*"{}
-				"Partial*"{}
+				"Skipped -*"{$installed += $item.Name}
+				"Skipped (*"{}
+				"Not installed"{}
 				"Success*"{}
 				default {
 					$needed += $item.Name
