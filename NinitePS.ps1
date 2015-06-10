@@ -295,7 +295,17 @@ foreach ($computer in $ADList) {
 		#Create a new computer object and see if we can ping it
 		$NewCompObj = New-Object -TypeName PSObject -Property $CompObj
 		$NewCompObj.Name = $computer.Name
-		$NewCompObj.Connectivity = Test-Connection -ComputerName $NewCompObj.Name -Count 1 -Quiet
+		
+		#Check if machine can be pinged and TermService up and running
+		if(Test-Connection -ComputerName $NewCompObj.Name -Count 1 -Quiet) {
+			if((Get-Service -ComputerName $NewCompObj.Name | Where-Object {$_.Name -eq 'TermService'}).Status -eq 'Running'){
+				$NewCompObj.Connectivity = $true
+			} else {
+				$NewCompObj.Error = "TermService not running on remote machine"
+			}
+		} else {
+			$NewCompObj.Error = "Cannot ping machine"
+		}
 						
 		if ($NewCompObj.Connectivity) {
 			
@@ -319,7 +329,7 @@ foreach ($computer in $ADList) {
 				$NewCompObj.Error = 'No Results from last job'
 			}
             
-          	#This next if/else block parses and stores the results in the 
+          	#Parse and store the results in the 
 			#newly created computer object
 			if ($success -eq 'OK') {
                 				
@@ -392,9 +402,13 @@ foreach ($computer in $ADList) {
 		#Add content to make reports look better
 		
 		if (!$audit -and $NewCompObj.Connectivity) {
-			if (!$NewCompObj.UpToDate){$NewCompObj.UpToDate = "None"}
+			if (!$NewCompObj.UpToDate -or ($NewCompObj.UpToDate -eq 'Unknown')){$NewCompObj.UpToDate = "None"}
 			if (!$NewCompObj.UpdatesNeeded){$NewCompObj.UpdatesNeeded = "None"}
 		} 
+		if (!$audit -and !$NewCompObj.Connectivity) {
+			if ($NewCompObj.UpdatesNeeded -eq 'Never Checked'){$NewCompObj.UpdatesNeeded = "Unknown"}
+			if ($NewCompObj.UpToDate -eq 'Unknown'){$NewCompObj.UpToDate = "None"}
+		}
 		
 		#Add the current computer object to the list for reports
 		$CurrentList += $NewCompObj
