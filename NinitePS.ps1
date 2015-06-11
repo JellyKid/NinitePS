@@ -298,10 +298,10 @@ foreach ($computer in $ADList) {
 		
 		#Check if machine can be pinged and TermService up and running
 		if(Test-Connection -ComputerName $NewCompObj.Name -Count 1 -Quiet) {
-			if((Get-Service -ComputerName $NewCompObj.Name | Where-Object {$_.Name -eq 'TermService'}).Status -eq 'Running'){
+			if((Get-Service -ComputerName $NewCompObj.Name | Where-Object {$_.Name -eq 'RpcEptMapper'}).Status -eq 'Running'){
 				$NewCompObj.Connectivity = $true
 			} else {
-				$NewCompObj.Error = "TermService not running on remote machine"
+				$NewCompObj.Error = "RPC Endpoint Mapper not running on remote machine"
 			}
 		} else {
 			$NewCompObj.Error = "Cannot ping machine"
