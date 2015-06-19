@@ -270,11 +270,9 @@ $CompObj = @{
 	'UpToDate'		= 'Unknown';
 	'UpdatesNeeded'	= 'Never Checked';
 	'Error'			= '';
+    'JobStatus'     = '';
 }
 
-if (!$audit) {
-	$CompObj.Add('JobStatus','')
-}
 
 
 Import-Module ActiveDirectory
@@ -376,10 +374,9 @@ foreach ($computer in $ADList) {
 			
 				$i = $ComputerStats.Name.IndexOf($NewCompObj.Name)
 				$ComputerStats[$i].Connectivity = $NewCompObj.Connectivity
-				$ComputerStats[$i].LastContact = $NewCompObj.LastContact
+				if($NewCompObj.LastContact -ne 'None'){$ComputerStats[$i].LastContact = $NewCompObj.LastContact}
 				
-				<# $ComputerStats[$i].UpToDate = include $ComputerStats[$i].UpToDate $NewCompObj.UpToDate
-				$ComputerStats[$i].UpdatesNeeded = include $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpdatesNeeded #>
+				
 				if ($uninstall) {
 					$ComputerStats[$i].UpToDate = exclude $ComputerStats[$i].UpToDate $NewCompObj.UpToDate
 					$ComputerStats[$i].UpdatesNeeded = exclude $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpToDate
@@ -391,8 +388,13 @@ foreach ($computer in $ADList) {
 					$ComputerStats[$i].Error = $NewCompObj.Error
 				}
 				if ($audit) {
-					$ComputerStats[$i].UpToDate = $NewCompObj.UpToDate
-					$ComputerStats[$i].UpdatesNeeded = $NewCompObj.UpdatesNeeded
+                    if ($NewCompObj.JobStatus -eq "Failed"){
+                        $ComputerStats[$i].UpToDate = "Unknown - Audit Failed"
+                        $ComputerStats[$i].Error = $NewCompObj.Error
+                    } else { 
+                        if ($NewCompObj.UpToDate -ne 'Unknown'){$ComputerStats[$i].UpToDate = $NewCompObj.UpToDate}
+					    if ($NewCompObj.UpdatesNeeded -ne 'Never Checked'){$ComputerStats[$i].UpdatesNeeded = $NewCompObj.UpdatesNeeded}
+                    }
 				}
 				
 		} else {
