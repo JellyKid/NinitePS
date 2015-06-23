@@ -5,13 +5,26 @@ param(
 		[Parameter(ParameterSetName='uninstall')]
 		[Switch]$uninstall,
 		[Parameter(ParameterSetName='audit')]
+		[Parameter(Mandatory=$true,ParameterSetName='reportonly')]
 		[Switch]$audit,
 		[Parameter(ParameterSetName='update')]
 		[Switch]$update,
 		[Parameter(ValueFromRemainingArguments=$true,Position=0)]
+		[Parameter(Mandatory=$true,ParameterSetName='install')]
+		[Parameter(Mandatory=$true,ParameterSetName='uninstall')]
+		[Parameter(Mandatory=$false,ParameterSetName='update')]
 		[string[]]$product,
+		[Parameter(Mandatory=$false,ParameterSetName='install')]
+		[Parameter(Mandatory=$false,ParameterSetName='uninstall')]
+		[Parameter(Mandatory=$false,ParameterSetName='update')]
         [Switch]$FullReports,
-		[string]$Machine
+		[Parameter(Mandatory=$false,ParameterSetName='install')]
+		[Parameter(Mandatory=$false,ParameterSetName='uninstall')]
+		[Parameter(Mandatory=$false,ParameterSetName='update')]
+		[Parameter(Mandatory=$false,ParameterSetName='audit')]
+		[string]$Machine,
+		[Parameter(Mandatory=$true,ParameterSetName='reportonly')]
+		[Switch]$ReportOnly
 )
 
 
@@ -19,12 +32,12 @@ If (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
     [Security.Principal.WindowsBuiltInRole] "Administrator"))
 {
     Write-Warning "You do not have Administrator rights to run this script!`nPlease re-run this script as an Administrator!"
-    Break
+    exit
 }
 
 if(($install -or $uninstall) -and !$product) {
 	Write-Warning "You must specify a product when installing or uninstalling"
-	Break
+	exit
 }
 
 
@@ -129,7 +142,7 @@ function parse-results($resulthash) {
 				"Partial*"{$needed += $item.Name}
 				"OK*"{$installed += $item.Name}
 				"Skipped -*"{$installed += $item.Name}
-				"Skipped (*"{}
+				#"Skipped (*"{}
 				"Not installed"{}
 				"Success*"{}
 				default {
@@ -260,6 +273,12 @@ $MyReport | ConvertTo-HTML -PreContent $Pre -PostContent $Post | Out-File Report
 #Check and see if machines have already been audited and recorded
 $ComputerStats = if (Test-Path ComputerStats.csv) {@(Import-Csv ComputerStats.csv)} else {,@()}
 
+if($ComputerStats -and $ReportOnly){
+	$MyReport = $ComputerStats | Sort-Object 'Name' | Select 'Name','Connectivity','LastContact','UpdatesNeeded','UpToDate','Error' 
+	BuildReport $MyReport $ReportTitle
+	exit
+}
+
 #Create object to store working machines in
 $CurrentList = @()
 
@@ -296,10 +315,10 @@ foreach ($computer in $ADList) {
 		
 		#Check if machine can be pinged and TermService up and running
 		if(Test-Connection -ComputerName $NewCompObj.Name -Count 1 -Quiet) {
-			if((Get-Service -ComputerName $NewCompObj.Name | Where-Object {$_.Name -eq 'RpcEptMapper'}).Status -eq 'Running'){
+			if((Get-Service -ComputerName $NewCompObj.Name | Where-Object {$_.Name -eq 'RpcSs'}).Status -eq 'Running'){
 				$NewCompObj.Connectivity = $true
 			} else {
-				$NewCompObj.Error = "RPC Endpoint Mapper not running on remote machine"
+				$NewCompObj.Error = "RPC Services not running on remote machine"
 			}
 		} else {
 			$NewCompObj.Error = "Cannot ping machine"
@@ -370,32 +389,25 @@ foreach ($computer in $ADList) {
 		
 		if ($ComputerStats -and $ComputerStats.Name.Contains($NewCompObj.Name)) {
 		
-				if (($NewCompObj.UpdatesNeeded -eq 'Never Checked') -and $NewCompObj.connectivity){$NewCompObj.UpdatesNeeded = ''}
+			if (($NewCompObj.UpdatesNeeded -eq 'Never Checked') -and $NewCompObj.connectivity){$NewCompObj.UpdatesNeeded = ''}
+		
+			$i = $ComputerStats.Name.IndexOf($NewCompObj.Name)
+			$ComputerStats[$i].Connectivity = $NewCompObj.Connectivity
+			if($NewCompObj.LastContact -ne 'None'){$ComputerStats[$i].LastContact = $NewCompObj.LastContact}
+			$ComputerStats[$i].Error = $NewCompObj.Error
 			
-				$i = $ComputerStats.Name.IndexOf($NewCompObj.Name)
-				$ComputerStats[$i].Connectivity = $NewCompObj.Connectivity
-				if($NewCompObj.LastContact -ne 'None'){$ComputerStats[$i].LastContact = $NewCompObj.LastContact}
-				
-				
-				if ($uninstall) {
-					$ComputerStats[$i].UpToDate = exclude $ComputerStats[$i].UpToDate $NewCompObj.UpToDate
-					$ComputerStats[$i].UpdatesNeeded = exclude $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpToDate
-					$ComputerStats[$i].Error = $NewCompObj.Error
-				}
-				if ($install -or $update) {
-					$ComputerStats[$i].UpToDate = include $ComputerStats[$i].UpToDate $NewCompObj.UpToDate
-					$ComputerStats[$i].UpdatesNeeded = exclude $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpToDate
-					$ComputerStats[$i].Error = $NewCompObj.Error
-				}
-				if ($audit) {
-                    if ($NewCompObj.JobStatus -eq "Failed"){
-                        $ComputerStats[$i].UpToDate = "Unknown - Audit Failed"
-                        $ComputerStats[$i].Error = $NewCompObj.Error
-                    } else { 
-                        if ($NewCompObj.UpToDate -ne 'Unknown'){$ComputerStats[$i].UpToDate = $NewCompObj.UpToDate}
-					    if ($NewCompObj.UpdatesNeeded -ne 'Never Checked'){$ComputerStats[$i].UpdatesNeeded = $NewCompObj.UpdatesNeeded}
-                    }
-				}
+			if ($uninstall) {
+				$ComputerStats[$i].UpToDate = exclude $ComputerStats[$i].UpToDate $NewCompObj.UpToDate
+				$ComputerStats[$i].UpdatesNeeded = exclude $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpToDate
+			}
+			if ($install -or $update) {
+				$ComputerStats[$i].UpToDate = include $ComputerStats[$i].UpToDate $NewCompObj.UpToDate
+				$ComputerStats[$i].UpdatesNeeded = exclude $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpToDate
+			}
+			if ($audit -and $NewCompObj.Connectivity) {
+				$ComputerStats[$i].UpToDate = $NewCompObj.UpToDate
+				$ComputerStats[$i].UpdatesNeeded = $NewCompObj.UpdatesNeeded
+			}	
 				
 		} else {
 			$ComputerStats += $NewCompObj | Select 'Name','Connectivity','LastContact','UpToDate','UpdatesNeeded','Error'
@@ -415,17 +427,27 @@ foreach ($computer in $ADList) {
 		#Add the current computer object to the list for reports
 		$CurrentList += $NewCompObj
 		
+	} else {
+	#if computer is not enabled remove from computerstats.csv list
+		if ($audit -and $ComputerStats) {
+			if($ComputerStats.Name -Contains $computer.name){
+				write-host "Removing disabled computer " $computer.name
+				$ComputerStats = $ComputerStats | where {$_.Name -ne $computer.Name}
+			}
+		}
 	}
-}
+	
+	if (!$ComputerStats -or !$CurrentList) {
+		Write-Error 'Missing Job information. Something went wrong.'
+		break
+	}
+	#Export known and updated computer status list to CSV for future retrieval
+	$ComputerStats | Sort-Object 'Name' | Select 'Name','Connectivity','LastContact','UpdatesNeeded','UpToDate','Error' | Export-CSV ComputerStats.csv
 
+} 
 #endregion Main Logic
 
-if (!$ComputerStats -or !$CurrentList) {
-	Write-Error 'Missing Job information. Something went wrong.'
-	break
-}
-#Export known and updated computer status list to CSV for future retrieval
-$ComputerStats | Sort-Object 'Name' | Select 'Name','Connectivity','LastContact','UpdatesNeeded','UpToDate','Error' | Export-CSV ComputerStats.csv
+
 
 #Add product to make reports look better
 
