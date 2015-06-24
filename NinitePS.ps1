@@ -5,7 +5,6 @@ param(
 		[Parameter(ParameterSetName='uninstall')]
 		[Switch]$uninstall,
 		[Parameter(ParameterSetName='audit')]
-		[Parameter(Mandatory=$true,ParameterSetName='reportonly')]
 		[Switch]$audit,
 		[Parameter(ParameterSetName='update')]
 		[Switch]$update,
@@ -74,7 +73,7 @@ if($update){
 	$jobname = 'Update'
 }
 
-if($audit){
+if($audit -or $reportonly){
 	$job = @(
 		"/audit"
 	)
@@ -142,7 +141,9 @@ function parse-results($resulthash) {
 				"Partial*"{$needed += $item.Name}
 				"OK*"{$installed += $item.Name}
 				"Skipped -*"{$installed += $item.Name}
-				#"Skipped (*"{}
+				"Skipped (no updates)"{}
+				"Skipped (up to date)"{}
+				"Skipped (not installed)"{}
 				"Not installed"{}
 				"Success*"{}
 				default {
@@ -195,16 +196,17 @@ $footer = ""
 $header = ""
 
 #Create footer and header
-if ($audit) {
+if ($audit -or $ReportOnly) {
 	$cnu = 0
-	
+	$tnm = 0
 	foreach ($comp in $MyReport){
 		if ($comp.UpdatesNeeded -and ($comp.UpdatesNeeded -ne 'Never Checked')){
 			$cnu++
 		}
+		
 	}
 	
-	$footer = "$cnu computers need updates"
+	$header = "$cnu computers need updates"
 } else {
 	$header += "$jobname - <span class=`"niniteproduct`">$product</span>"
 	$joberrors = 0
