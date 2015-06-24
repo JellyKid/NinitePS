@@ -194,36 +194,26 @@ function BuildReport ($MyReport,$title) {
 
 $footer = ""
 $header = ""
+$cnu = 0
+$joberrors = 0
 
-#Create footer and header
-if ($audit -or $ReportOnly) {
-	$cnu = 0
-	$tnm = 0
-	foreach ($comp in $MyReport){
+foreach ($comp in $MyReport){
 		if ($comp.UpdatesNeeded -and ($comp.UpdatesNeeded -ne 'Never Checked')){
 			$cnu++
 		}
-		
-	}
-	
-	$header = "$cnu computers need updates"
-} else {
-	$header += "$jobname - <span class=`"niniteproduct`">$product</span>"
-	$joberrors = 0
-	
-	foreach ($comp in $MyReport){
-		if ($comp.JobStatus -ne 'Success'){
+		if ($comp.Error){
 			$joberrors ++
 		}
+		
 	}
-	
-	if ($joberrors){
-		$footer = "Job had $joberrors errors, please see above"
-	} else {
-		$footer = "Job completed successfully!"
-	}
-	
-	
+
+#Create footer and header
+if ($audit -or $ReportOnly) {	
+	$header = "$cnu computers need updates. $joberrors errors. Please see below."
+} else {
+	$header += "$jobname - <span class=`"niniteproduct`">$product</span>"
+		
+	$footer = "Job had $joberrors errors, please see above"
 }
 
 
