@@ -46,6 +46,8 @@ Push-Location $PsScriptRoot
 
  
 #region setting job options
+
+
 if($install){
 	$job = @(
 		"/disableshortcuts",
@@ -157,10 +159,11 @@ function parse-results($resulthash) {
 		}
 	}
 	
-	$returnarray = New-Object string[] 3
+	$returnarray = New-Object string[] 4
     $returnarray[0] = $needed -join ', '
     $returnarray[1] = $installed -join ', '
 	$returnarray[2] = $errors
+	$returnarray[3] = $resulthash.Status
 	return $returnarray
 }
 
@@ -180,13 +183,32 @@ function Call-Ninite {
 	if(Test-Path ninitepro.exe) {
 		$job += @("/remote",$computer)
 		Write-Host $job
-		$status = & .\ninitepro.exe $job | Write-Output
+		$RawResults = & .\ninitepro.exe $job | Write-Output
 	} else {
 		Write-Error "Error ninitepro.exe doesn't exist in this path"
 		return $null
 	}
 	
-	return $status
+	if ($RawResults[0] -contains 'OK') {
+		$RawResults = $RawResults[1..($RawResults.Count - 1)]	
+	} else {
+		Get-Date | out-file -Append ErrorLog.txt
+		foreach ($line in $results) {
+			write-warning $line
+			$line | out-file -Append ErrorLog.txt
+		}
+		return $null
+	}
+	
+	if($FullReports){#Write out raw ninite reports, mainly for debugging purposes	
+		$date = Get-Date -UFormat "%m%d%Y-%H%M"
+		if(!(Test-Path ".\FullReports")){New-Item -ItemType directory 'FullReports'}
+		ConvertFrom-Csv $FullReports | Export-Csv ".\FullReports\$computer-$date.csv" -NoTypeInformation
+	}
+	
+	$ResultsHash = create_hash($RawResults)
+	$ResultsHash.Status = 'Success' #Change Status to Success so that results can be parsed properly
+	return parse-results $ResultsHash
 	
 }
 
@@ -263,7 +285,7 @@ $MyReport | ConvertTo-HTML -PreContent $Pre -PostContent $Post | Out-File Report
  
 
 #Check and see if machines have already been audited and recorded
-$ComputerStats = if (Test-Path ComputerStats.csv) {@(Import-Csv ComputerStats.csv)} else {,@()}
+$ComputerStats = if (Test-Path ComputerStats.csv) {,@(Import-Csv ComputerStats.csv)} else {,@()}
 
 if($ComputerStats -and $ReportOnly){
 	$MyReport = $ComputerStats | Sort-Object 'Name' | Select 'Name','Connectivity','LastContact','UpdatesNeeded','UpToDate','Error' 
@@ -295,6 +317,7 @@ if($machine) {
 	$ADList = Get-ADComputer -Filter '*'
 }
 
+
  
 #region Main Logic
 foreach ($computer in $ADList) {
@@ -320,59 +343,35 @@ foreach ($computer in $ADList) {
 			
             $NewCompObj.LastContact = Get-Date
 			
-			#Execute Ninite with specified parameters and return raw results
+			#Machine needs to be audit before any other jobs for CSV and audit reports to look right
+			if(!$audit){
+				if ((!$ComputerStats) -or ($ComputerStats.Name -notcontains $NewCompObj.Name)){
+					write-host "Auditing new machine " $NewCompObj.Name
+					$results = Call-Ninite @("/audit","/silent",".") $NewCompObj.Name
+					if($results){
+						$NewCompObj.UpdatesNeeded = $results[0]
+						$NewCompObj.UpToDate = $results[1]
+						$ComputerStats += $NewCompObj | Select 'Name','Connectivity','LastContact','UpToDate','UpdatesNeeded','Error'
+					}
+				}
+			}
+			#Execute Ninite with specified parameters and return results
             $results = Call-Ninite $job $NewCompObj.Name
 			
-			#Check if job was successful 
 			if ($results) {
-				if ($results[0] -contains 'OK') {
-					$success = $results[0]
-					$results = $results[1..($results.Count - 1)]
-					
-				} else {
-					$success = $results[0]
-					foreach ($line in $results) {write-warning $line}	
-				} 
-			} else {
-				Write-Host 'No results?'
-				$NewCompObj.Error = 'No Results from last job'
-			}
-            
-          	#Parse and store the results in the 
-			#newly created computer object
-			if ($success -eq 'OK') {
-                				
-				
-				$ResultsHash = create_hash($results)
-				
-				#Change Status to Success so that results can be parsed properly
-				if($ResultsHash.Status -eq 'OK') {$ResultsHash.Status = 'Success'}
-				
-				$ParsedResults = parse-results $ResultsHash
                 
-				$NewCompObj.UpdatesNeeded = $ParsedResults[0]
-				$NewCompObj.UpToDate = $ParsedResults[1]
-				$NewCompObj.Error = $ParsedResults[2]
-								
+				$NewCompObj.UpdatesNeeded = $results[0]
+				$NewCompObj.UpToDate = $results[1]
+				$NewCompObj.Error = $results[2]								
 				
 				if (!$audit) {
-					$NewCompObj.JobStatus = $ResultsHash.Status
+					$NewCompObj.JobStatus = $results[3]
 				}
 									
 			} else {
-				$NewCompObj.Error = $success
 				$NewCompObj.JobStatus = "Failed"
 			}
-			
-			
-			
-			#Write out raw ninite reports, mainly for debugging purposes			
-			if($FullReports -and $results){
-                    $date = Get-Date -UFormat "%m%d%Y-%H%M"
-                    $compname = $NewCompObj.Name
-                    if(!(Test-Path ".\FullReports")){New-Item -ItemType directory 'FullReports'}
-                    ConvertFrom-Csv $results | Export-Csv ".\FullReports\$compname-$date.csv" -NoTypeInformation
-            }
+
 			
 		}
 
@@ -434,7 +433,7 @@ foreach ($computer in $ADList) {
 		break
 	}
 	#Export known and updated computer status list to CSV for future retrieval
-	$ComputerStats | Sort-Object 'Name' | Select 'Name','Connectivity','LastContact','UpdatesNeeded','UpToDate','Error' | Export-CSV ComputerStats.csv
+	$ComputerStats | Sort-Object 'Name' | Select 'Name','Connectivity','LastContact','UpdatesNeeded','UpToDate','Error' | Export-CSV ComputerStats.csv -NoTypeInformation
 
 } 
 #endregion Main Logic
