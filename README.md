@@ -101,6 +101,3 @@ Everytime you run NinitePS an html report.html is create with job status and Com
 
 
 
-A great way to use this tool is to have it create HTML reports and mail those reports through a simple script as follows
-
-
