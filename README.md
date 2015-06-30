@@ -69,6 +69,7 @@ In my environment I have 2 scheduled tasks. The first task is running 4 times a 
 This searches for all active computers in my domain, tests connectivity, updates any software out of date(audits & updates if machine isn't in csv already), and stores it in the CSV. The second task I run at the end of the day is the -ReportOnly switch followed by an emailreports.ps1 script
 
 >"powershell -command c:\locationtoscript\NinitePS.ps1 -ReportOnly"
+
 >"powershell -command c:\locationtoscript\emailreports.ps1"
 
 ####emailreports.ps1
