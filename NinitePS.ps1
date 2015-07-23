@@ -131,6 +131,27 @@ function create_hash ([array] $doublearray) {
 }
 
 
+function cleanArray($array, $string){
+	$returnArray = @()
+	foreach($item in $array){
+		if($item -ne $string){
+			$returnArray += $item
+		}
+	}
+	return $returnArray
+}
+
+function cleanString($string, $seperator, $word){
+	$splitString = $string -split $seperator
+	$newArray = @()
+	foreach($item in $splitString){
+		if($item -ne $word){
+			$newArray += $item
+		}
+	}
+	return $newArray -join $seperator
+}
+
 function parse-results($resulthash) {
 	$needed = @()
     $installed = @()
@@ -159,6 +180,10 @@ function parse-results($resulthash) {
 		}
 	}
 	
+	if($installed.count -gt 1){
+		$installed = cleanArray $installed ''
+	}
+		
 	$returnarray = New-Object string[] 4
     $returnarray[0] = $needed -join ', '
     $returnarray[1] = $installed -join ', '
@@ -343,6 +368,7 @@ foreach ($computer in $ADList) {
 			
             $NewCompObj.LastContact = Get-Date
 			
+			
 			#Machine needs to be audit before any other jobs for CSV and audit reports to look right
 			if(!$audit){
 				if ((!$ComputerStats) -or ($ComputerStats.Name -notcontains $NewCompObj.Name)){
@@ -380,25 +406,40 @@ foreach ($computer in $ADList) {
 		
 		if ($ComputerStats -and $ComputerStats.Name.Contains($NewCompObj.Name)) {
 		
-			if (($NewCompObj.UpdatesNeeded -eq 'Never Checked') -and $NewCompObj.connectivity){$NewCompObj.UpdatesNeeded = ''}
+			
+			
 		
 			$i = $ComputerStats.Name.IndexOf($NewCompObj.Name)
-			$ComputerStats[$i].Connectivity = $NewCompObj.Connectivity
-			if($NewCompObj.LastContact -ne 'None'){$ComputerStats[$i].LastContact = $NewCompObj.LastContact}
+								
 			$ComputerStats[$i].Error = $NewCompObj.Error
 			
-			if ($uninstall) {
-				$ComputerStats[$i].UpToDate = exclude $ComputerStats[$i].UpToDate $NewCompObj.UpToDate
-				$ComputerStats[$i].UpdatesNeeded = exclude $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpToDate
+			$ComputerStats[$i].Connectivity = $NewCompObj.Connectivity
+			
+			if($ComputerStats[$i].Connectivity){
+				$ComputerStats[$i].LastContact = $NewCompObj.LastContact
+				
+				if($update){
+					$ComputerStats[$i].UpToDate = include $ComputerStats[$i].UpToDate $NewCompObj.UpToDate
+					$ComputerStats[$i].UpToDate = exclude $ComputerStats[$i].UpToDate $NewCompObj.UpdatesNeeded
+					$ComputerStats[$i].UpdatesNeeded = include $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpdatesNeeded
+					$ComputerStats[$i].UpdatesNeeded = exclude $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpToDate
+				}
+				if($install){
+					$ComputerStats[$i].UpdatesNeeded = exclude $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpToDate
+					$ComputerStats[$i].UpToDate = include $ComputerStats[$i].UpToDate $NewCompObj.UpToDate
+				}
+				if($uninstall){
+					$ComputerStats[$i].UpToDate = exclude $ComputerStats[$i].UpToDate $NewCompObj.UpToDate
+					$ComputerStats[$i].UpdatesNeeded = exclude $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpToDate
+				}
+				if($audit){
+					$ComputerStats[$i].UpToDate = $NewCompObj.UpToDate
+					$ComputerStats[$i].UpdatesNeeded = $NewCompObj.UpdatesNeeded
+				}
+				$ComputerStats[$i].UpdatesNeeded = cleanString $ComputerStats[$i].UpdatesNeeded ', ' 'Never Checked'
+				$ComputerStats[$i].UpToDate = cleanString $ComputerStats[$i].UpToDate ', ' 'Unknown'
+				$ComputerStats[$i].UpToDate = cleanString $ComputerStats[$i].UpToDate ', ' ''
 			}
-			if ($install -or $update) {
-				$ComputerStats[$i].UpToDate = include $ComputerStats[$i].UpToDate $NewCompObj.UpToDate
-				$ComputerStats[$i].UpdatesNeeded = exclude $ComputerStats[$i].UpdatesNeeded $NewCompObj.UpToDate
-			}
-			if ($audit -and $NewCompObj.Connectivity) {
-				$ComputerStats[$i].UpToDate = $NewCompObj.UpToDate
-				$ComputerStats[$i].UpdatesNeeded = $NewCompObj.UpdatesNeeded
-			}	
 				
 		} else {
 			$ComputerStats += $NewCompObj | Select 'Name','Connectivity','LastContact','UpToDate','UpdatesNeeded','Error'
