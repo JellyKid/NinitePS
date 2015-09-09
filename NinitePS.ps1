@@ -169,6 +169,12 @@ function parse-results($resulthash) {
 				"Skipped (not installed)"{}
 				"Not installed"{}
 				"Success*"{}
+				"Failed*"{
+					$errors += $item.Name
+					$errors += " - "
+					$errors += $item.Value
+					$errors += ";`n"
+				}
 				default {
 					$needed += $item.Name
 					$errors += $item.Name
