@@ -351,6 +351,17 @@ if($machine) {
 
  
 #region Main Logic
+
+#Cleanup list of computers no longer in AD
+if(!$machine){
+	for($i = 0; $i -lt $ComputerStats.length; $i++){
+		if($ADList.name -notcontains $ComputerStats[$i].name){
+			write-host "List contains computer" $ComputerStats[$i].name "not in AD, Removing"
+			 $ComputerStats = $ComputerStats | Where-Object {$_.Name -ne $ComputerStats[$i].name}
+		}
+	}
+}
+
 foreach ($computer in $ADList) {
 	 
 	if ($computer.Enabled){	
@@ -422,6 +433,7 @@ foreach ($computer in $ADList) {
 			$ComputerStats[$i].Connectivity = $NewCompObj.Connectivity
 			
 			if($ComputerStats[$i].Connectivity){
+				write-host "Break 0"
 				$ComputerStats[$i].LastContact = $NewCompObj.LastContact
 				
 				if($update){
@@ -445,6 +457,12 @@ foreach ($computer in $ADList) {
 				$ComputerStats[$i].UpdatesNeeded = cleanString $ComputerStats[$i].UpdatesNeeded ', ' 'Never Checked'
 				$ComputerStats[$i].UpToDate = cleanString $ComputerStats[$i].UpToDate ', ' 'Unknown'
 				$ComputerStats[$i].UpToDate = cleanString $ComputerStats[$i].UpToDate ', ' ''
+			} else {
+				write-host "Break 1"
+				if(((Get-Date) - ([datetime]$ComputerStats[$i].LastContact)).Days -ge 7){ #Check if last contact is greater than 2 weeks
+					write-host "Removing computer" $ComputerStats[$i].name ". Has not been in contact for greater than 7 days."
+					$ComputerStats = $ComputerStats | Where-Object {$_.name -ne $ComputerStats[$i].name}
+				}
 			}
 				
 		} else {
@@ -475,6 +493,7 @@ foreach ($computer in $ADList) {
 		}
 	}
 	
+	
 	if (!$ComputerStats -or !$CurrentList) {
 		Write-Error 'Missing Job information. Something went wrong.'
 		break
@@ -483,6 +502,12 @@ foreach ($computer in $ADList) {
 	$ComputerStats | Sort-Object 'Name' | Select 'Name','Connectivity','LastContact','UpdatesNeeded','UpToDate','Error' | Export-CSV ComputerStats.csv -NoTypeInformation
 
 } 
+
+
+
+	
+
+
 #endregion Main Logic
 
 
